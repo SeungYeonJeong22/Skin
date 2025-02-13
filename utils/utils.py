@@ -7,7 +7,7 @@ from tqdm import tqdm
 from datetime import datetime
 import matplotlib.pyplot as plt
 import cv2
-
+import pandas as pd
 
 def current_time():
     return datetime.now().strftime("%m%d_%H%M")
@@ -46,12 +46,15 @@ def get_lr(opt):
     
 
 # calculate the loss and accuracy per epoch
-def loss_epoch(model, model_name, loss_func, dataset_dl, opt=None, device='cpu'):
+def loss_epoch(model, model_name, epoch, loss_func, dataset_dl, opt=None, device='cpu', mode='train'):
     running_loss = 0.0
     running_acc = 0.0
     len_data = len(dataset_dl.dataset)
+    int_to_label = dataset_dl.dataset.dataset.int_to_label
 
-    for xb, yb in tqdm(dataset_dl, desc="Processing batches"):
+    results = []
+
+    for xb, yb, img_name in tqdm(dataset_dl, desc=f"Processing {mode} batches"):
         xb = xb.to(device)
         yb = yb.to(device)
         output = model(xb)
@@ -62,6 +65,17 @@ def loss_epoch(model, model_name, loss_func, dataset_dl, opt=None, device='cpu')
 
         loss_b = loss_func(logits, yb)
         acc_b = accuracy(logits, yb)
+
+        probs = torch.softmax(logits, dim=1)
+        preds = torch.argmax(probs, dim=1)
+
+        for i in range(len(xb)):
+            results.append({
+                'image': "/".join(img_name[i].split("/")[-2:]),
+                'true_label': int_to_label[yb[i].item()],
+                'predicted_label': int_to_label[preds[i].item()],
+                'probability': f"{probs[i][preds[i]].item():.4f}"
+            })        
         
         if opt is not None:
             opt.zero_grad()
@@ -73,6 +87,20 @@ def loss_epoch(model, model_name, loss_func, dataset_dl, opt=None, device='cpu')
 
     loss = running_loss / len_data
     acc = running_acc / len_data
+
+    # epoch csv
+    results_df = pd.DataFrame(results)
+
+    train_epoch_dir = f"Training_Prediction_Epochs/{model_name}"
+    valid_epoch_dir = f"Validation_Prediction_Epochs/{model_name}"
+    if mode=='train': 
+        os.makedirs(train_epoch_dir, exist_ok=True)
+        results_df.to_csv(f'{train_epoch_dir}/{epoch}.csv', index=False)
+    elif mode=='valid': 
+        os.makedirs(valid_epoch_dir, exist_ok=True)
+        results_df.to_csv(f'{valid_epoch_dir}/{epoch}.csv', index=False)
+    
+
     return loss, acc
 
 
@@ -152,3 +180,26 @@ def save_grad_cam(img_path, model, img_tensor, target_layer, output_path, class_
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     superimposed_img = apply_heatmap(img, heatmap)
     cv2.imwrite(output_path, superimposed_img)
+
+
+# Hook 함수 정의
+def get_activation(activation, name):
+    def hook(model, input, output):
+        activation[name] = output.detach()
+    return hook
+
+
+# 시각화 함수 정의
+def plot_activation(activation, layer_name, model_name, epoch, num_images=5, save_dir='img/feature_vis'):
+    act = activation[layer_name].cpu().numpy()
+    fig, axes = plt.subplots(1, num_images, figsize=(15, 15))
+    for i in range(num_images):
+        axes[i].imshow(np.mean(act[i], axis=0), cmap='viridis')
+        axes[i].axis('off')
+
+    save_dir = os.path.join(save_dir, model_name)
+    os.makedirs(save_dir, exist_ok=True)
+
+    save_path = os.path.join(save_dir, f'{epoch}.jpg')
+    plt.savefig(save_path)
+    plt.close(fig)
