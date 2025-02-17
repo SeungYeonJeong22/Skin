@@ -100,7 +100,6 @@ def loss_epoch(model, model_name, epoch, loss_func, dataset_dl, opt=None, device
         os.makedirs(valid_epoch_dir, exist_ok=True)
         results_df.to_csv(f'{valid_epoch_dir}/{epoch}.csv', index=False)
     
-
     return loss, acc
 
 

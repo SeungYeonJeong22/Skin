@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
-from models.efficientnet.enet import enet
-from models.convnext.convnext import convnext
-from models.vit.vit import vit
+from models.enet import enet
+from models.convnext import convnext
+from models.vit import vit
 
 class FusionModel(nn.Module):
     """

@@ -3,10 +3,13 @@ from torch.utils.data import DataLoader
 import torch.nn as nn
 from utils.utils import accuracy, seed, current_time
 from dataset import SkinConditionDataset
-from models.efficientnet.enet import enet
-from models.vit.vit import vit
-from models.convnext.convnext import convnext
+from models.enet import enet
+from models.vit import vit
+from models.convnext import convnext
 from torchvision import transforms
+from models.fusion import FusionModel
+from models.sejin import Sejin
+
 
 import argparse
 
@@ -93,14 +96,21 @@ def test(args, params, device='cpu'):
     saved_model_time = "_".join(saved_model.split('.')[0].split("_")[:2])
     saved_model_name = "".join(saved_model.split('.')[0].split("_")[2:])
     
-    if saved_model_name.lower().__contains__('vit'):
+    # 모델 선택 & Grad-CAM에 쓰기 위한 마지막 레이어 선택
+    if args.model.lower().__contains__('vit'):
         model, feature_extractor = vit(num_classes=num_classes)
-    elif saved_model_name.lower().__contains__('efficient'):
-        model = enet(model_name=saved_model_name, num_classes=num_classes)
-    elif saved_model_name.lower().__contains__('convnext'):
+    elif args.model.lower().__contains__('efficient'):
+        model = enet(model_name=args.model, num_classes=num_classes)
+    elif args.model.lower().__contains__('convnext'):
         model = convnext(num_classes=num_classes)
+    elif args.model.lower().__contains__('fusion'):
+        model = FusionModel(num_classes=num_classes)
+    elif args.model.lower().__contains__('sejin'):
+        base_model_name = 'convnext_tiny'
+        sub_model_name = 'swin_tiny_patch4_window7_224'
+        model = Sejin(base_model_name=base_model_name, sub_model_name=sub_model_name, num_classes=num_classes)
     else:
-        raise ValueError("Unsupported model type")        
+        raise ValueError("Unsupported model type")     
 
     model.load_state_dict(torch.load(f'./save_weights/{saved_model}'))
     model = model.to(device)

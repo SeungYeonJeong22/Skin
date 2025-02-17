@@ -1,9 +1,10 @@
 from torch.utils.data import DataLoader, random_split
 
-from models.efficientnet.enet import enet
-from models.vit.vit import vit
-from models.convnext.convnext import convnext
-from models.custom.fusion import FusionModel
+from models.enet import enet
+from models.vit import vit
+from models.convnext import convnext
+from models.fusion import FusionModel
+from models.sejin import Sejin
 
 import torch
 import torch.nn as nn
@@ -77,6 +78,13 @@ if __name__ == "__main__":
         model = FusionModel(num_classes=num_classes)
         layer_name = 'fusion_conv'
         model.fusion_conv.register_forward_hook(get_activation(activation, layer_name))
+    elif args.model.lower().__contains__('sejin'):
+        base_model_name = 'convnext_tiny'
+        sub_model_name = 'swin_tiny_patch4_window7_224'
+        model = Sejin(base_model_name=base_model_name, sub_model_name=sub_model_name, num_classes=num_classes)
+        last_stage = list(model.base_model.stages)[-1]
+        layer_name = list(last_stage.children())[-1]
+        layer_name.register_forward_hook(get_activation(activation, layer_name))        
     else:
         raise ValueError("Unsupported model type")
         
@@ -108,7 +116,6 @@ if __name__ == "__main__":
         'early_stopping_patience':early_stopping_patience
     }
 
-
     wandb.init(project="skin-condition-classification", name=model_name, config={
         "batch_size": params['batch_size'],
         "num_epochs": params['num_epochs'],
@@ -128,7 +135,6 @@ if __name__ == "__main__":
     print(f'Validation size: {val_size}')
 
     train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
-
 
     # ViT는 증강 x
     if args.model.lower().__contains__('vit'):
